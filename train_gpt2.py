@@ -330,6 +330,21 @@ torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
+# Batch Size Calculation with DDP:
+# ----------------------------------
+# total_batch_size = 524288 tokens (what we want per optimizer step)
+# Each GPU processes: B * T = 16 * 1024 = 16384 tokens per micro-step
+# With ddp_world_size GPUs: 16384 * world_size tokens per micro-step across all GPUs
+# grad_accum_steps = total_batch_size / (B * T * world_size)
+#
+# Example with 8 GPUs:
+#   grad_accum_steps = 524288 / (16 * 1024 * 8) = 524288 / 131072 = 4
+#   Each step: 8 GPUs × 4 accum × 16384 tokens = 524288 tokens ✓
+#
+# Example with 1 GPU:
+#   grad_accum_steps = 524288 / (16 * 1024 * 1) = 524288 / 16384 = 32
+#   Each step: 1 GPU × 32 accum × 16384 tokens = 524288 tokens ✓
+
 total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
 B = 16 # micro batch size
 T = 1024 # sequence length
