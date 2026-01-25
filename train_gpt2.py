@@ -23,6 +23,7 @@ class CausalSelfAttention(nn.Module):
         self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd)
         # output projection
         self.c_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
         # regularization
         self.n_head = config.n_head
         self.n_embd = config.n_embd
@@ -55,6 +56,7 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd)
         self.gelu = nn.GELU(approximate='tanh')
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -95,6 +97,32 @@ class GPT(nn.Module):
         ))
 
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+
+        self.transformer.wte.weight = self.lm_head.weight  # weight tying 30%
+        # this means that the token embedding weights and the language modeling head weights are the same
+        # this reduces the number of parameters by 30% and improves performance
+        # the lm head represents the final linear layer that maps the hidden states to the vocabulary logits
+        # reason we had to tie them is because out own GPT implementation does not use a Conv1D layer like the original GPT-2 model
+        # a Conv1D layer is just a linear layer with some special weight initialization
+        # we didnt use it because it is not in the PyTorch standard library
+
+        self.apply(self._init_weights)
+
+    # Initialize weights as in the original GPT paper (https://arxiv.org/abs/2005.14165)
+    # Language models are unsupervised multitask learners paper
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            std = 0.02
+            if hasattr(module, 'NANOGPT_SCALE_INIT'):
+                std *= (2 * self.config.n_layer) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.zeros_(module.bias)
+            nn.init.ones_(module.weight)
 
     def forward(self, idx, targets=None):
         # idx is of shape (B, T)
