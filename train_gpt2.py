@@ -276,15 +276,6 @@ for i in range(num_return_sequences):
 
 """"
 Expected output: A loss around 10-11 (since 
-−
-ln
-⁡
-(
-1
-/
-50257
-)
-≈
-10.82
+−ln⁡(1/50257)≈10.82
 −ln(1/50257)≈10.82 for random uniform predictions over vocab).
 """
