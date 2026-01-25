@@ -1,3 +1,5 @@
 torch
 transformers
 matplotlib
+tiktoken
+torch --index-url https://download.pytorch.org/whl/cu121

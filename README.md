@@ -1,24 +1,27 @@
 # GPT-2
 
-A project for exploring and training GPT-2 models using PyTorch and Hugging Face Transformers.
+Exploring GPT-2 model architecture and training with PyTorch and Hugging Face Transformers.
 
-## Setup
+## 🚀 Quick Start
 
-### 1. Create a virtual environment
+### 1. Clone the repository
 
 ```bash
-python -m venv .venv
+git clone https://github.com/realgio95/gpt-2.git
+cd gpt-2
 ```
 
-### 2. Activate the virtual environment
+### 2. Create and activate virtual environment
 
 **Windows (PowerShell):**
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
 **Linux/macOS:**
 ```bash
+python -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -26,38 +29,47 @@ source .venv/bin/activate
 
 ```bash
 pip install -r requirements.txt
+pip install ipykernel  # For Jupyter notebook support
 ```
 
-### 4. (Optional) Install Jupyter kernel for notebooks
+### 4. Download training data
 
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt" -OutFile "input.txt"
+```
+
+**Linux/macOS:**
 ```bash
-pip install ipykernel
+wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 ```
 
-## Requirements
+## 📁 Project Structure
+
+```
+gpt-2/
+├── play.ipynb        # Interactive exploration of GPT-2 weights
+├── train_gpt2.py     # Training script (WIP)
+├── requirements.txt  # Python dependencies
+└── README.md
+```
+
+## 📓 Notebooks
+
+### play.ipynb
+
+Explore GPT-2's pretrained weights:
+- Load GPT-2 (124M) from Hugging Face
+- Visualize positional embeddings as heatmaps
+- Analyze embedding dimensions across positions
+
+## 🛠️ Requirements
 
 - Python 3.10+
 - PyTorch
 - Transformers (Hugging Face)
+- Matplotlib
 
+## 📝 License
 
-# Run this to 
-python.exe -m pip install --upgrade pip 
-
-To change the notebook kernel in VS Code:
-
-Click the kernel name in the top-right corner of the notebook (e.g., "Python 3.11.9" or "base")
-
-A dropdown menu appears with options:
-
-Python Environments - Shows all detected Python interpreters including .venv
-Jupyter Kernel - Shows registered Jupyter kernels
-Existing Jupyter Server - Connect to a remote server
-Select Python Environments → Choose your .venv (.venv)
-
-Keyboard shortcut: Press Ctrl+Shift+P and type "Notebook: Select Notebook Kernel"
-
-If .venv doesn't appear, try:
-
-Reload VS Code (Ctrl+Shift+P → "Developer: Reload Window")
-Ensure ipykernel is installed in the venv (already done earlier)
+MIT
