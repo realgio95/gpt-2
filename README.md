@@ -70,6 +70,65 @@ Explore GPT-2's pretrained weights:
 - Transformers (Hugging Face)
 - Matplotlib
 
-## 📝 License
+## � Ubuntu/WSL Setup (with GPU support)
+
+For faster training with `torch.compile()` and Triton, use Ubuntu via WSL:
+
+### 1. Install WSL and Ubuntu
+```powershell
+wsl --install -d Ubuntu
+```
+Restart your computer, then launch Ubuntu from Start menu and create a username/password.
+
+### 2. Update Ubuntu packages
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+### 3. Install Python and pip
+```bash
+sudo apt install python3 python3-pip python3-venv -y
+```
+
+### 4. Install CUDA toolkit for WSL
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt update
+sudo apt install cuda-toolkit-12-4 -y
+```
+
+### 5. Access the repo from WSL
+```bash
+cd /mnt/c/repos/gpt-2
+```
+
+### 6. Create virtual environment
+```bash
+python3 -m venv .venv-linux
+source .venv-linux/bin/activate
+```
+
+### 7. Install PyTorch with CUDA
+```bash
+pip install torchvision torch --index-url https://download.pytorch.org/whl/cu124
+```
+
+### 8. Install dependencies
+```bash
+pip install tiktoken transformers triton
+```
+
+### 9. Verify GPU access
+```bash
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
+### 10. Run training
+```bash
+python train_gpt2.py
+```
+
+## �📝 License
 
 MIT

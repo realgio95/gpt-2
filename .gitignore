@@ -1,5 +1,6 @@
 # Virtual environment
 .venv/
+.venv*/
 venv/
 env/
 
@@ -24,3 +25,9 @@ build/
 .DS_Store
 Thumbs.db
 venv
+
+# Ubuntu specific
+cuda*
+*.deb
+
+

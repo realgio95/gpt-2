@@ -49,6 +49,10 @@ class CausalSelfAttention(nn.Module):
         y = self.c_proj(y)
         return y
 
+class TanhGELU(nn.Module):
+    def forward(self, input):
+        return 0.5 * input * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (input + 0.044715 * torch.pow(input, 3.0))))
+
 class MLP(nn.Module):
 
     def __init__(self, config):
@@ -252,12 +256,14 @@ if torch.cuda.is_available():
 train_loader = DataLoaderLite(B=8, T=1024)
 
 # set matmul precision to high for better performance with bfloat16 tf32
-#torch.set_float32_matmul_precision('high') 
+torch.set_float32_matmul_precision('high') 
+
+# gradient scaling if fp16 sao we use bf16
 
 # get logits
 model = GPT(GPTConfig())
 model.to(device)
-# model = torch.compile(model) # requires Triton, not available on Windows
+model = torch.compile(model) # requires Triton, not available on Windows
 
 # optimize!
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
