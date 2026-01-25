@@ -282,7 +282,15 @@ torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
-train_loader = DataLoaderLite(B=8, T=1024)
+total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
+B = 16 # micro batch size
+T = 1024 # sequence length
+assert total_batch_size % (B * T) == 0, "make sure total_batch_size is divisible by B * T"
+grad_accum_steps = total_batch_size // (B * T)
+print(f"total desired batch size: {total_batch_size}")
+print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+
+train_loader = DataLoaderLite(B=B, T=T)
 
 # set matmul precision to high for better performance with bfloat16 tf32
 torch.set_float32_matmul_precision('high') 
@@ -315,26 +323,51 @@ def get_lr(it):
 # optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), eps=1e-8)
 optimizer = model.configure_optimizers(weight_decay=0.1, learning_rate=max_lr, device=device)
 
-for i in range(max_steps):
+# Gradient Accumulation Explained:
+# ---------------------------------
+# We want to train with a large batch size (524288 tokens) for better gradient estimates,
+# but we can't fit that many tokens in GPU memory at once.
+# Solution: Process smaller "micro-batches" and accumulate gradients over multiple forward/backward passes.
+#
+# Example: total_batch_size=524288, micro_batch=16*1024=16384 tokens
+#          grad_accum_steps = 524288 / 16384 = 32 micro-batches per optimizer step
+#
+# Why scale loss by 1/grad_accum_steps?
+# - Each backward() call ADDS gradients to .grad (PyTorch default behavior)
+# - After 32 backward() calls, gradients are 32x larger than a single batch
+# - But we want the MEAN gradient (as if we processed one big batch)
+# - So we divide loss by 32 BEFORE backward(), making gradients 32x smaller
+# - Result: accumulated gradients = mean over all 32 micro-batches ✓
+
+for step in range(max_steps):
     t0 = time.time()
-    x, y = train_loader.next_batch()
-    x, y = x.to(device), y.to(device)
     optimizer.zero_grad()
-    with torch.autocast(device_type=device, dtype=torch.bfloat16):
-        logits, loss = model(x, y)
-    loss.backward()
+    loss_accum = 0.0
+    for micro_step in range(grad_accum_steps):
+        x, y = train_loader.next_batch()
+        x, y = x.to(device), y.to(device)
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
+            logits, loss = model(x, y)
+        # we have to scale the loss to account for gradient accumulation,
+        # because the gradients just add on each successive backward().
+        # addition of gradients corresponds to a SUM in the objective, but
+        # instead of a SUM we want MEAN. Scale the loss here so it comes out right
+        loss = loss / grad_accum_steps
+        loss_accum += loss.detach()
+        loss.backward()
+    # clip the gradient norm to 1.0 to prevent exploding gradients when using fp16 / bf16
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     # set learning rate for this iteration
-    lr = get_lr(i)
+    lr = get_lr(step)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     optimizer.step()
     torch.cuda.synchronize() # wait for the GPU to finish work
     t1 = time.time()
     dt = (t1 - t0)*1000 # time difference in miliseconds
-    # tokens per second = (batch size * sequence length) / time taken
-    tokens_per_sec = (train_loader.B * train_loader.T) / (t1 - t0)
-    print(f"step {i:4d} | loss: {loss.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+    # tokens per second = total batch size / time taken
+    tokens_per_sec = (train_loader.B * train_loader.T * grad_accum_steps) / (t1 - t0)
+    print(f"step {step:4d} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
 
 import sys; sys.exit(0)
 
