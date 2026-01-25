@@ -269,14 +269,62 @@ class DataLoaderLite:
         return x, y
 
 # -----------------------------------------------------------------------------
-# attempt to autodetect the device
-import time
-device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
-elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    device = "mps"
+# run the training loop
+from torch.distributed import init_process_group, destroy_process_group
+import os
+
+# Distributed Data Parallel (DDP) Explained:
+# -------------------------------------------
+# DDP allows training across multiple GPUs (on one or more machines).
+# Each GPU runs its own process with a copy of the model.
+#
+# How it works:
+# 1. Each process loads the same model and processes DIFFERENT data batches
+# 2. Each process computes gradients independently (forward + backward)
+# 3. Before optimizer.step(), DDP automatically ALL-REDUCES gradients across all GPUs
+#    (averages them so all processes have identical gradients)
+# 4. Each process updates its model identically → models stay in sync
+#
+# Key environment variables (set by torchrun):
+# - RANK: Global process ID (0, 1, 2, ... across all machines)
+# - LOCAL_RANK: GPU ID on this machine (0, 1, 2, ... per machine)
+# - WORLD_SIZE: Total number of processes/GPUs
+#
+# Why divide grad_accum_steps by world_size?
+# - With 8 GPUs, each processes B*T tokens per micro-step
+# - Total tokens per micro-step = B*T*8 (8x more than single GPU!)
+# - So we need 8x fewer accumulation steps to reach same total_batch_size
+#
+# Run with: torchrun --nproc_per_node=NUM_GPUS train_gpt2.py
+
+# set up DDP (distributed data parallel).
+# torchrun command sets the env variables RANK, LOCAL_RANK, and WORLD_SIZE
+ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
+if ddp:
+    # use of DDP atm demands CUDA, we set the device appropriately according to rank
+    assert torch.cuda.is_available(), "for now i think we need CUDA for DDP"
+    init_process_group(backend='nccl')
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
+else:
+    # vanilla, non-DDP run
+    ddp_rank = 0
+    ddp_local_rank = 0
+    ddp_world_size = 1
+    master_process = True
+    # attempt to autodetect device
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = "mps"
 print(f"using device: {device}")
+
+import time
 
 torch.manual_seed(1337)
 if torch.cuda.is_available():
@@ -285,10 +333,11 @@ if torch.cuda.is_available():
 total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
 B = 16 # micro batch size
 T = 1024 # sequence length
-assert total_batch_size % (B * T) == 0, "make sure total_batch_size is divisible by B * T"
-grad_accum_steps = total_batch_size // (B * T)
-print(f"total desired batch size: {total_batch_size}")
-print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
+grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
+if master_process:
+    print(f"total desired batch size: {total_batch_size}")
+    print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
 train_loader = DataLoaderLite(B=B, T=T)
 
@@ -364,10 +413,10 @@ for step in range(max_steps):
     optimizer.step()
     torch.cuda.synchronize() # wait for the GPU to finish work
     t1 = time.time()
-    dt = (t1 - t0)*1000 # time difference in miliseconds
-    # tokens per second = total batch size / time taken
-    tokens_per_sec = (train_loader.B * train_loader.T * grad_accum_steps) / (t1 - t0)
-    print(f"step {step:4d} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+    dt = t1 - t0 # time difference in seconds
+    tokens_processed = train_loader.B * train_loader.T * grad_accum_steps
+    tokens_per_sec = tokens_processed / dt
+    print(f"step {step:4d} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
 
 import sys; sys.exit(0)
 
