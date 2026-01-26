@@ -163,6 +163,62 @@ edu_fineweb10B/
 ### Quick test without FineWeb
 If you don't want to download the full dataset, the training script will automatically fall back to `input.txt` (Shakespeare) for testing.
 
+## 📊 Visualizing Training Results
+
+After training completes, you can analyze the results using the `play.ipynb` notebook (Cell 26):
+
+### Prerequisites
+1. **Training must be complete** - The log file `log/log.txt` is created during training
+2. **FineWeb dataset downloaded** - Required for HellaSwag evaluation during training
+3. **HellaSwag evaluation ran** - The training script evaluates HellaSwag every 250 steps
+
+### Options for training configuration
+
+| Option | Description |
+|--------|-------------|
+| `use_compile = True` | Enable `torch.compile()` for faster training (Linux only) |
+| `use_compile = False` | Disable compile to allow HellaSwag eval and text generation |
+| Skip val loss check | Comment out validation loss section (see below) |
+| Without DDP | Run `python train_gpt2.py` instead of `torchrun` for single GPU |
+
+### Skipping validation loss check
+
+To skip validation loss evaluation, comment out lines ~575-592 in `train_gpt2.py`:
+
+```python
+    # once in a while evaluate our validation loss
+    # if step % 250 == 0 or last_step:
+    #     model.eval()
+    #     val_loader.reset()
+    #     with torch.no_grad():
+    #         val_loss_accum = 0.0
+    #         val_loss_steps = 20
+    #         for _ in range(val_loss_steps):
+    #             x, y = val_loader.next_batch()
+    #             x, y = x.to(device), y.to(device)
+    #             with torch.autocast(device_type=device, dtype=torch.bfloat16):
+    #                 logits, loss = model(x, y)
+    #             loss = loss / val_loss_steps
+    #             val_loss_accum += loss.detach()
+    #     if ddp:
+    #         dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
+    #     if master_process:
+    #         print(f"validation loss: {val_loss_accum.item():.4f}")
+    #         with open(log_file, "a") as f:
+    #             f.write(f"{step} val {val_loss_accum.item():.4f}\n")
+```
+
+### Viewing the plots
+Open `play.ipynb` and run Cell 26 to see:
+- **Loss curves** - Training and validation loss vs GPT-2 baseline
+- **HellaSwag accuracy** - Model accuracy vs GPT-2/GPT-3 baselines
+
+```python
+# The cell parses log/log.txt and plots:
+# - Panel 1: Train/Val loss with GPT-2 baseline (3.2924 for 124M)
+# - Panel 2: HellaSwag accuracy vs GPT-2 (29.4%) and GPT-3 (33.7%) baselines
+```
+
 ## Running with Multiple GPUs (DDP)
 
 To train on multiple GPUs using Distributed Data Parallel:
