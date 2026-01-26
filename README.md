@@ -124,9 +124,77 @@ pip install tiktoken transformers triton
 python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
 ```
 
-### 10. Run training
+## 🎯 Complete Training Workflow
+
+Follow these steps in order to train GPT-2 from scratch and evaluate results:
+
+### Step 1: Download FineWeb-Edu Dataset
 ```bash
+# In WSL/Linux terminal
+cd /mnt/c/repos/gpt-2
+source .venv-linux/bin/activate
+pip install datasets tqdm
+python fineweb.py
+```
+⏱️ This takes several hours. Continue to Step 2 while waiting.
+
+### While FineWeb Downloads...
+
+While the dataset downloads, you can prepare and test the training pipeline:
+
+1. **Review `train_gpt2.py`** - Familiarize yourself with hyperparameters (lines ~497-527)
+2. **Open `play.ipynb`** - Run the exploration cells (Cells 1-25) to understand GPT-2 architecture
+3. **Test with Shakespeare** - If FineWeb isn't ready, training falls back to `input.txt` automatically
+4. **Prepare HellaSwag** - The evaluation runs automatically every 250 steps during training
+
+Once FineWeb finishes downloading, you're ready for the full training run.
+
+### Step 2: Run Training
+```bash
+# Single GPU
 python train_gpt2.py
+
+# Multi-GPU (8 GPUs)
+torchrun --standalone --nproc_per_node=8 train_gpt2.py
+```
+Training logs are written to `log/log.txt`. Checkpoints saved every 5000 steps.
+
+### Step 3: Monitor HellaSwag Progress
+The training script automatically evaluates HellaSwag every 250 steps. Watch for output like:
+```
+step  250 | hellaswag accuracy: 0.2567
+step  500 | hellaswag accuracy: 0.2834
+...
+```
+
+### Step 4: Visualize Results
+After training completes, open `play.ipynb` and run Cell 26:
+```python
+# This cell parses log/log.txt and plots:
+# - Loss curves (train/val) vs GPT-2 baseline
+# - HellaSwag accuracy vs GPT-2/GPT-3 baselines
+```
+
+### Step 5: Generate Text with Trained Model
+Run the final cells in `train_gpt2.py` or use the notebook to generate text:
+```python
+# Example output after training:
+# > Hello, I'm a language model, and I can help you understand...
+```
+
+### Quick Reference Commands
+```bash
+# Activate environment (WSL)
+cd /mnt/c/repos/gpt-2 && source .venv-linux/bin/activate
+
+# Check training progress
+tail -f log/log.txt
+
+# View last HellaSwag result
+grep "hella" log/log.txt | tail -5
+
+# Resume from checkpoint (manual - modify train_gpt2.py)
+# Load: checkpoint = torch.load("log/model_05000.pt")
 ```
 
 ## 📦 Downloading FineWeb-Edu Dataset
