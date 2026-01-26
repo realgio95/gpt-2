@@ -208,6 +208,49 @@ To skip validation loss evaluation, comment out lines ~575-592 in `train_gpt2.py
     #             f.write(f"{step} val {val_loss_accum.item():.4f}\n")
 ```
 
+### Tunable Hyperparameters
+
+Key hyperparameters in `train_gpt2.py` (lines ~497-527) that you can adjust:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_steps` | 19073 | Training steps (~1 epoch over 10B tokens). **Increase 3x for better HellaSwag** |
+| `max_lr` | 6e-4 | Maximum learning rate |
+| `min_lr` | 6e-5 | Minimum learning rate (0.1 × max_lr) |
+| `warmup_steps` | 715 | Linear warmup steps (~375M tokens) |
+| `total_batch_size` | 524288 | Tokens per optimizer step (~0.5M) |
+| `B` | 16 | Micro batch size (per GPU) |
+| `T` | 1024 | Sequence length (context window) |
+| `weight_decay` | 0.1 | Weight decay for 2D params (line ~548) |
+
+**Example: Training 3x longer**
+```python
+max_steps = 19073 * 3  # ~57k steps, 3 epochs over 10B tokens
+```
+
+This significantly improves HellaSwag accuracy (observed ~5-10% improvement over baseline).
+
+### Model Checkpointing
+
+The training script saves model checkpoints every 5000 steps (configurable). Checkpoints are saved to `log/model_{step:05d}.pt`:
+
+```python
+if step > 0 and (step % 5000 == 0 or last_step):
+    # optionally write model checkpoints
+    checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
+    checkpoint = {
+        'model': raw_model.state_dict(),
+        'config': raw_model.config,
+        'step': step,
+        'val_loss': val_loss_accum.item()
+    }
+    # you might also want to add optimizer.state_dict() and
+    # rng seeds etc., if you wanted to more exactly resume training
+    torch.save(checkpoint, checkpoint_path)
+```
+
+**To change checkpoint frequency**, modify `step % 5000` to your preferred interval.
+
 ### Viewing the plots
 Open `play.ipynb` and run Cell 26 to see:
 - **Loss curves** - Training and validation loss vs GPT-2 baseline
