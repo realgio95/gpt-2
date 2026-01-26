@@ -31,3 +31,12 @@ cuda*
 *.deb
 
 
+# Logs
+log/
+logs/
+*.log
+*.out
+
+# fuineweb dataset files
+educational files
+edu_fineweb*/
