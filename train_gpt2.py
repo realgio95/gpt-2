@@ -358,7 +358,7 @@ class DataLoaderLite:
         assert split in {'train', 'val'}
 
         # get the shard filenames
-        data_root = "edu_fineweb10B"
+        data_root = "edu_fineweb10B" # or edu_fineweb10B
         shards = []
         if os.path.exists(data_root):
             shards = os.listdir(data_root)
@@ -495,7 +495,7 @@ if torch.cuda.is_available():
 #   Each step: 1 GPU × 32 accum × 16384 tokens = 524288 tokens ✓
 
 total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 16 # micro batch size
+B = 8 # micro batch size
 T = 1024 # sequence length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
