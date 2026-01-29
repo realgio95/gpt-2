@@ -346,6 +346,10 @@ This will automatically:
 - Each GPU processes different data batches
 - Gradients are averaged across all GPUs
 - Reduces `grad_accum_steps` by 8× to maintain the same total batch size
+
+## Results
+I got validation loss down to 1.9 from 10 over training of 14 hours!
+
 ## �📝 License
 
 MIT
