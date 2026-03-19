@@ -104,6 +104,7 @@ Token embeddings (wte) are shared with the output projection (lm_head):
 from dataclasses import dataclass
 import inspect
 import math
+import os
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -291,7 +292,7 @@ class GPT(nn.Module):
         """
         assert model_type in {"gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl"}, "Only gpt2 model is supported"
         from transformers import GPT2LMHeadModel
-        print("Loading pretrained model from huggingface transformers: %s", model_type)
+        print(f"Loading pretrained model from huggingface transformers: {model_type}")
 
         # n_layer, n_head, n_embd based on model type
         config_args = {
@@ -420,7 +421,6 @@ class DataLoaderLite:
 from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-import os
 
 # Distributed Data Parallel (DDP) Explained:
 # -------------------------------------------
@@ -703,50 +703,3 @@ for step in range(max_steps):
 
 if ddp:
     destroy_process_group()
-
-import sys; sys.exit(0)
-
-# prefix tokens
-model.eval()
-num_return_sequences = 5
-max_length = 30
-tokens = enc.encode("Hello, I'm a language model,")
-tokens = torch.tensor(tokens, dtype=torch.long) # (8,)
-tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1) # (5, 8)
-x = tokens.to(device)
-
-# generate! right now x is (B, T) where B = 5, T = 8
-# set the seed to 42
-torch.manual_seed(42)
-if device == "cuda":
-    torch.cuda.manual_seed(42)
-while x.size(1) < max_length:
-    # forward the model to get the logits
-    with torch.no_grad():
-        logits = model(x) # (B, T, vocab_size)
-        # take the logits at the last position
-        logits = logits[:, -1, :] # (B, vocab_size)
-        # get the probabilities
-        probs = F.softmax(logits, dim=-1)
-        # do top-k sampling of 50 (huggingface pipeline default)
-        # topk_probs here becomes (5, 50), topk_indices is (5, 50)
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-        # select a token from the top-k probabilities
-        ix = torch.multinomial(topk_probs, 1) # (B, 1)
-        # gather the corresponding indices
-        xcol = torch.gather(topk_indices, -1, ix) # (B, 1)
-        # append to the sequence
-        x = torch.cat((x, xcol), dim=1)
-
-# print the generated text
-for i in range(num_return_sequences):
-    tokens = x[i, :max_length].tolist()
-    decoded = enc.decode(tokens)
-    print(">", decoded)
-
-
-""""
-Expected output: A loss around 10-11 (since 
-−ln⁡(1/50257)≈10.82
-−ln(1/50257)≈10.82 for random uniform predictions over vocab).
-"""

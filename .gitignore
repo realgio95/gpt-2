@@ -37,6 +37,6 @@ logs/
 *.log
 *.out
 
-# fuineweb dataset files
-educational files
+# fineweb dataset files
+# edu_fineweb10B/ directory with tokenized shards
 edu_fineweb*/
