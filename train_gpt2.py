@@ -118,6 +118,47 @@ class GPTConfig:
     n_head: int = 12
     n_embd: int = 768
 
+# GPT-3 model configurations from "Language Models are Few-Shot Learners" (Brown et al., 2020)
+# Table 2 in the paper: https://arxiv.org/abs/2005.14165
+#
+# Key differences from GPT-2:
+#   - block_size is 2048 (vs 1024 in GPT-2)
+#   - vocab_size remains 50257 (same BPE tokenizer)
+#   - Architecture is identical (same transformer blocks); only scale differs
+#
+# To reproduce a GPT-3 variant from scratch, instantiate GPTConfig with the
+# corresponding values below and train with the matching hyperparameters.
+#
+# Training hyperparameters per size (from the paper):
+#   | Model      | batch size (tokens) | max_lr  | warmup tokens |
+#   |------------|---------------------|---------|---------------|
+#   | Small      | 0.5M                | 6.0e-4  | 375M          |
+#   | Medium     | 0.5M                | 3.0e-4  | 375M          |
+#   | Large      | 0.5M                | 2.5e-4  | 375M          |
+#   | XL         | 1M                  | 2.0e-4  | 375M          |
+#   | 2.7B       | 1M                  | 1.6e-4  | 375M          |
+#   | 6.7B       | 2M                  | 1.2e-4  | 375M          |
+#   | 13B        | 2M                  | 1.0e-4  | 375M          |
+#   | 175B       | 3.2M                | 6.0e-5  | 375M          |
+GPT3_CONFIGS = {
+    # n_params ≈ 125M  (same architecture as GPT-2 124M but with 2048 context)
+    "gpt3-small":   dict(n_layer=12, n_head=12,  n_embd=768,   block_size=2048),
+    # n_params ≈ 350M
+    "gpt3-medium":  dict(n_layer=24, n_head=16,  n_embd=1024,  block_size=2048),
+    # n_params ≈ 760M
+    "gpt3-large":   dict(n_layer=24, n_head=16,  n_embd=1536,  block_size=2048),
+    # n_params ≈ 1.3B
+    "gpt3-xl":      dict(n_layer=24, n_head=16,  n_embd=2048,  block_size=2048),
+    # n_params ≈ 2.7B
+    "gpt3-2.7b":    dict(n_layer=32, n_head=32,  n_embd=2560,  block_size=2048),
+    # n_params ≈ 6.7B
+    "gpt3-6.7b":    dict(n_layer=32, n_head=32,  n_embd=4096,  block_size=2048),
+    # n_params ≈ 13B
+    "gpt3-13b":     dict(n_layer=40, n_head=40,  n_embd=5120,  block_size=2048),
+    # n_params ≈ 175B
+    "gpt3-175b":    dict(n_layer=96, n_head=96,  n_embd=12288, block_size=2048),
+}
+
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
@@ -335,6 +376,46 @@ class GPT(nn.Module):
                 with torch.no_grad():
                     sd[k].copy_(sd_hf[k])
 
+        return model
+
+    @classmethod
+    def from_gpt3_preset(cls, model_type):
+        """Create a randomly-initialized GPT model with a GPT-3 architecture.
+
+        GPT-3 uses the same transformer block structure as GPT-2 but scales up
+        the context window to 2048 tokens and uses larger n_layer/n_head/n_embd
+        values.  Unlike GPT-2 there are no publicly released pretrained weights,
+        so this method returns a freshly-initialized model ready for training.
+
+        Available presets (from Brown et al., 2020 – Table 2):
+            "gpt3-small"  – 125M params  (n_layer=12,  n_head=12,  n_embd=768)
+            "gpt3-medium" – 350M params  (n_layer=24,  n_head=16,  n_embd=1024)
+            "gpt3-large"  – 760M params  (n_layer=24,  n_head=16,  n_embd=1536)
+            "gpt3-xl"     – 1.3B params  (n_layer=24,  n_head=16,  n_embd=2048)
+            "gpt3-2.7b"   – 2.7B params  (n_layer=32,  n_head=32,  n_embd=2560)
+            "gpt3-6.7b"   – 6.7B params  (n_layer=32,  n_head=32,  n_embd=4096)
+            "gpt3-13b"    – 13B  params  (n_layer=40,  n_head=40,  n_embd=5120)
+            "gpt3-175b"   – 175B params  (n_layer=96,  n_head=96,  n_embd=12288)
+
+        All variants share:
+            vocab_size = 50257  (GPT-2 BPE tokenizer, same as GPT-2)
+            block_size = 2048   (doubled context window compared with GPT-2)
+
+        Example usage::
+
+            model = GPT.from_gpt3_preset("gpt3-small")
+            # → GPTConfig(block_size=2048, vocab_size=50257,
+            #             n_layer=12, n_head=12, n_embd=768)
+        """
+        assert model_type in GPT3_CONFIGS, (
+            f"Unknown GPT-3 preset '{model_type}'. "
+            f"Choose one of: {list(GPT3_CONFIGS.keys())}"
+        )
+        config_args = dict(GPT3_CONFIGS[model_type])  # copy
+        config_args['vocab_size'] = 50257
+        config = GPTConfig(**config_args)
+        print(f"Creating GPT-3 model '{model_type}': {config}")
+        model = cls(config)
         return model
 
 # -----------------------------------------------------------------------------

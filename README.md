@@ -231,6 +231,78 @@ edu_fineweb10B/
 ### Quick test without FineWeb
 If you don't want to download the full dataset, the training script will automatically fall back to `input.txt` (Shakespeare) for testing.
 
+## 🧠 Reproducing GPT-3: What Weights to Set
+
+GPT-3 uses the **exact same transformer block architecture** as GPT-2 (decoder-only, pre-norm, causal attention, MLP with GELU). The only things that change are **scale** and **context window**.
+
+### Architecture differences vs GPT-2
+
+| Parameter      | GPT-2 (124M) | GPT-3 Small (125M) | GPT-3 175B   |
+|----------------|--------------|--------------------|--------------|
+| `block_size`   | **1024**     | **2048**           | **2048**     |
+| `vocab_size`   | 50257        | 50257              | 50257        |
+| `n_layer`      | 12           | 12                 | 96           |
+| `n_head`       | 12           | 12                 | 96           |
+| `n_embd`       | 768          | 768                | 12288        |
+
+The key insight: **double the context window** (`block_size = 2048`) and **scale up** `n_layer`, `n_head`, and `n_embd`.
+
+### All GPT-3 model sizes (Brown et al., 2020 – Table 2)
+
+| Preset           | Approx params | `n_layer` | `n_head` | `n_embd` | `block_size` |
+|------------------|---------------|-----------|----------|----------|--------------|
+| `gpt3-small`     | 125M          | 12        | 12       | 768      | 2048         |
+| `gpt3-medium`    | 350M          | 24        | 16       | 1024     | 2048         |
+| `gpt3-large`     | 760M          | 24        | 16       | 1536     | 2048         |
+| `gpt3-xl`        | 1.3B          | 24        | 16       | 2048     | 2048         |
+| `gpt3-2.7b`      | 2.7B          | 32        | 32       | 2560     | 2048         |
+| `gpt3-6.7b`      | 6.7B          | 32        | 32       | 4096     | 2048         |
+| `gpt3-13b`       | 13B           | 40        | 40       | 5120     | 2048         |
+| `gpt3-175b`      | 175B          | 96        | 96       | 12288    | 2048         |
+
+All sizes use `vocab_size = 50257` (same GPT-2 BPE tokenizer).
+
+### How to instantiate a GPT-3 model
+
+```python
+# Option 1 – use the named preset factory (recommended)
+model = GPT.from_gpt3_preset("gpt3-small")
+
+# Option 2 – build the config manually
+from train_gpt2 import GPT, GPTConfig
+config = GPTConfig(
+    block_size=2048,   # GPT-3 uses a 2048-token context window
+    vocab_size=50257,
+    n_layer=12,
+    n_head=12,
+    n_embd=768,
+)
+model = GPT(config)
+```
+
+### Matching training hyperparameters (from the paper)
+
+| Model size | Batch size (tokens) | `max_lr` | `warmup_steps`* |
+|------------|---------------------|----------|-----------------|
+| Small      | 0.5M                | 6.0e-4   | 715             |
+| Medium     | 0.5M                | 3.0e-4   | 715             |
+| Large      | 0.5M                | 2.5e-4   | 715             |
+| XL         | 1M                  | 2.0e-4   | 1430            |
+| 2.7B       | 1M                  | 1.6e-4   | 1430            |
+| 6.7B       | 2M                  | 1.2e-4   | 2860            |
+| 13B        | 2M                  | 1.0e-4   | 2860            |
+| 175B       | 3.2M                | 6.0e-5   | 4577            |
+
+\* `warmup_steps` estimated as 375M warmup tokens ÷ batch_size_tokens.
+
+All GPT-3 sizes use:
+- **Optimizer**: AdamW with `betas=(0.9, 0.95)`, `eps=1e-8`
+- **Weight decay**: 0.1 on 2-D parameters (same as GPT-2 training here)
+- **LR schedule**: cosine decay to `min_lr = 0.1 × max_lr`
+- **Mixed precision**: bfloat16 recommended
+
+---
+
 ## 📊 Visualizing Training Results
 
 After training completes, you can analyze the results using the `play.ipynb` notebook (Cell 26):
